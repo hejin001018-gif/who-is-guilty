@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" role="img" aria-labelledby="title desc">
+  <title id="title">NOVA-17 AI core</title>
+  <desc id="desc">A stylized interrogation AI core portrait.</desc>
+  <rect width="360" height="360" fill="#0b0f12"/>
+  <path d="M60 84h240v192H60z" fill="#111b22" stroke="#58d3e8" stroke-width="3"/>
+  <path d="M92 116h176v128H92z" fill="#162730" stroke="#2f3b45" stroke-width="2"/>
+  <circle cx="180" cy="180" r="54" fill="#0d1114" stroke="#7fd987" stroke-width="4"/>
+  <circle cx="180" cy="180" r="28" fill="#58d3e8" opacity=".24"/>
+  <circle cx="180" cy="180" r="10" fill="#eef3f6"/>
+  <path d="M180 82v34M180 244v34M82 180h34M244 180h34" stroke="#58d3e8" stroke-width="6" stroke-linecap="square"/>
+  <path d="M116 116l-32-32M244 116l32-32M116 244l-32 32M244 244l32 32" stroke="#e9be63" stroke-width="4"/>
+  <path d="M118 296h124M132 316h96" stroke="#2f3b45" stroke-width="8" stroke-linecap="square"/>
+  <path d="M116 148h34M210 148h34M116 212h34M210 212h34" stroke="#58d3e8" stroke-width="5"/>
+</svg>
