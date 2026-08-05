@@ -3,68 +3,105 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI审讯室 - 三人证词局</title>
+  <meta name="theme-color" content="#090d10">
+  <meta name="description" content="《疑案追声》是一款由 AI 驱动的多角色证词推理游戏。审问嫌疑人、搜集证据，找出案件真相。">
+  <title>疑案追声｜多角色证词推理</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#interrogationPanel">跳到审讯区</a>
+  <div class="ambient-grid" aria-hidden="true"></div>
+
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">云港市专案组 / AIGC 推理审讯</p>
-        <h1>AI审讯室</h1>
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div>
+          <p class="eyebrow">云港市刑侦档案 · CASE AUDIO ARCHIVE</p>
+          <div class="brand-title-row">
+            <h1>疑案追声</h1>
+            <span class="brand-edition">AI 推理实验室</span>
+          </div>
+          <p class="brand-subtitle">听证词，查矛盾，让每一句话成为线索。</p>
+        </div>
       </div>
+
       <div class="topbar-right">
-        <button id="newCaseBtn" class="new-case-btn" type="button">新案件</button>
         <div class="case-stats" aria-label="案件状态">
-          <div>
-            <span>回合</span>
+          <div class="stat-card">
+            <span>调查回合</span>
             <strong id="turnCount">0 / 20</strong>
+            <div class="stat-progress" aria-hidden="true"><i id="turnProgress"></i></div>
           </div>
-          <div>
-            <span>搜证次数</span>
+          <div class="stat-card">
+            <span>搜证进度</span>
             <strong id="searchCount">0 / 4</strong>
+            <div class="stat-progress" aria-hidden="true"><i id="searchProgress"></i></div>
           </div>
-          <div>
-            <span>阶段</span>
-            <strong id="caseStatus">调查中</strong>
+          <div class="stat-card status-card">
+            <span>案件状态</span>
+            <strong><i id="caseStatusDot" class="status-dot" aria-hidden="true"></i><b id="caseStatus">调查中</b></strong>
+            <small id="statusHint">证据收集中</small>
           </div>
         </div>
+        <button id="newCaseBtn" class="new-case-btn" type="button">
+          <span aria-hidden="true">＋</span>
+          <span>开启新案</span>
+        </button>
       </div>
     </header>
 
+    <nav class="workspace-nav" aria-label="工作台导航">
+      <a href="#casePanel"><span>01</span>人物档案</a>
+      <a href="#interrogationPanel"><span>02</span>审讯记录</a>
+      <a href="#evidencePanel"><span>03</span>证据与结案</a>
+    </nav>
+
     <main class="interrogation-grid">
-      <section class="suspect-panel" aria-label="三名被审问 AI">
-        <div class="portrait-frame">
-          <img src="assets/ai-core.svg" alt="AI 审讯核心">
-          <div class="scanline"></div>
+      <section id="casePanel" class="suspect-panel workspace-panel" aria-labelledby="caseTitle">
+        <div class="dossier-hero">
+          <div class="portrait-frame">
+            <img src="assets/ai-core.svg" alt="疑案追声案件分析核心">
+            <div class="scanline" aria-hidden="true"></div>
+          </div>
+          <div class="suspect-copy">
+            <p class="panel-label">CURRENT CASE / 当前案件</p>
+            <h2 id="caseTitle">隐藏案卷</h2>
+            <p id="caseBrief">案件导演正在生成一宗逻辑自洽的案件，并随机创建相关人物及其秘密身份。</p>
+          </div>
         </div>
 
-        <div class="suspect-copy">
-          <p class="panel-label">案件代号</p>
-          <h2 id="caseTitle">隐藏案卷</h2>
-          <p id="caseBrief">每局开始时，隐藏案件导演会随机生成一个逻辑自洽的案件，分配嫌疑人与无辜者，并把秘密身份分别告知三名 AI。</p>
+        <div class="section-heading">
+          <div>
+            <p class="panel-label">PERSONS OF INTEREST</p>
+            <h2>选择审问对象</h2>
+          </div>
+          <span id="subjectCountLabel" class="section-count">载入中</span>
         </div>
-
         <div id="subjectList" class="subject-list" role="list" aria-label="选择审问对象"></div>
 
         <div id="subjectProfile" class="subject-profile" aria-live="polite"></div>
 
-        <div class="rule-note">
-          <p class="panel-label">行动限制</p>
-          <p>调查最多进行 20 回合，整局最多搜证 4 次。受审讯条例约束，对于未成年人和 70 岁以上老人，围绕他们的审问或搜证总次数最多 5 次。</p>
-        </div>
+        <details class="rule-note">
+          <summary><span>调查规则</span><small>查看行动限制</small></summary>
+          <p>调查最多进行 20 回合，整局最多搜证 4 次。未成年人和 70 岁以上老人受审讯条例保护，围绕该人物的审问或搜证总次数最多 5 次。</p>
+        </details>
       </section>
 
-      <section class="dialogue-panel" aria-label="审讯对话">
+      <section id="interrogationPanel" class="dialogue-panel workspace-panel" aria-labelledby="currentSubjectTitle">
         <div class="dialogue-header">
           <div>
-            <p class="panel-label">审讯记录</p>
+            <p class="panel-label">LIVE INTERROGATION / 审讯记录</p>
             <h2 id="currentSubjectTitle">选择对象后开始行动</h2>
           </div>
+          <span id="interrogationState" class="live-indicator"><i aria-hidden="true"></i>监听中</span>
         </div>
 
         <section class="mind-panel" aria-label="嫌疑人审讯监控画面">
           <canvas id="mindCanvas" width="960" height="380" aria-label="嫌疑人在审讯过程中的外在表情监控画面"></canvas>
+          <div class="monitor-corners" aria-hidden="true"></div>
           <div class="mind-copy">
             <span id="mindMood" class="mind-mood">实时监控</span>
             <h3 id="mindSubject">审讯影像</h3>
@@ -72,35 +109,87 @@
           </div>
         </section>
 
-        <div id="log" class="log" aria-live="polite"></div>
-
-        <div class="action-strip">
-          <button id="searchBtn" class="tool-btn accent" type="button">搜证（0/4）</button>
+        <div class="log-stage">
+          <div id="log" class="log" aria-live="polite" aria-relevant="additions text"></div>
+          <button id="scrollLatestBtn" class="scroll-latest" type="button" hidden>
+            <span>回到最新记录</span><span aria-hidden="true">↓</span>
+          </button>
         </div>
 
-        <form id="questionForm" class="question-form">
-          <label class="visually-hidden" for="questionInput">输入审问问题</label>
-          <input id="questionInput" type="text" autocomplete="off" maxlength="500" required placeholder="自行输入问题，例如：你在 20:30 为什么靠近机房？">
-          <button id="questionSubmitBtn" type="submit">审问</button>
-        </form>
+        <div class="interrogation-controls">
+          <div class="quick-prompts" aria-label="快捷提问模板">
+            <span>提问思路</span>
+            <button type="button" data-prompt="请完整复述案发前后的时间线，具体到每个关键时间点。">核对时间线</button>
+            <button type="button" data-prompt="关于现有证据中与你有关的部分，你如何解释？">追问证据</button>
+            <button type="button" data-prompt="你与另外两名相关人员分别是什么关系？最近是否发生过冲突？">梳理关系</button>
+          </div>
+
+          <div class="action-strip">
+            <button id="searchBtn" class="tool-btn accent" type="button">
+              <span class="button-icon" aria-hidden="true">⌕</span>
+              <span><b>围绕当前人物搜证</b><small id="searchButtonHint">剩余 4 次机会</small></span>
+            </button>
+          </div>
+
+          <form id="questionForm" class="question-form">
+            <label class="visually-hidden" for="questionInput">输入审问问题</label>
+            <div class="question-input-wrap">
+              <textarea id="questionInput" rows="1" autocomplete="off" maxlength="500" required placeholder="输入你的问题，追问时间、证据或人物关系…"></textarea>
+              <div class="composer-meta">
+                <span>Enter 发送 · Shift + Enter 换行</span>
+                <span id="questionCount">0 / 500</span>
+              </div>
+            </div>
+            <button id="questionSubmitBtn" type="submit">
+              <span>发送审问</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </form>
+        </div>
       </section>
 
-      <section class="evidence-panel" aria-label="证据板">
+      <section id="evidencePanel" class="evidence-panel workspace-panel" aria-labelledby="evidenceTitle">
         <div class="panel-heading">
-          <p class="panel-label">证据板</p>
-          <h2>人证与物证</h2>
+          <div>
+            <p class="panel-label">EVIDENCE BOARD / 证据板</p>
+            <h2 id="evidenceTitle">人证与物证</h2>
+          </div>
+          <span id="evidenceCount" class="section-count">0 条</span>
         </div>
         <div id="evidenceGrid" class="evidence-grid"></div>
 
         <div class="judgement-panel">
-          <p class="panel-label">最终判断</p>
-          <p>你可以在 20 回合内随时提前结案。勾选你认为有罪的嫌疑人；必须完整找出全部罪犯，且不能误伤无辜者。</p>
+          <div class="judgement-heading">
+            <div>
+              <p class="panel-label">FINAL VERDICT</p>
+              <h3>锁定有罪者</h3>
+            </div>
+            <span id="verdictSelectionCount">未选择</span>
+          </div>
+          <p>勾选所有你认为有罪的人。漏选或误选都会导致结案失败，提交后将无法继续调查。</p>
           <div id="verdictChoices" class="verdict-choices"></div>
-          <button id="submitVerdictBtn" class="submit-verdict" type="button">提交结案判断</button>
+          <button id="submitVerdictBtn" class="submit-verdict" type="button">
+            <span>提交结案判断</span><span aria-hidden="true">封存案卷 →</span>
+          </button>
         </div>
       </section>
     </main>
   </div>
+
+  <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <form method="dialog">
+      <span class="confirm-icon" aria-hidden="true">!</span>
+      <p class="panel-label">ACTION CONFIRMATION</p>
+      <h2 id="confirmTitle">确认操作</h2>
+      <p id="confirmMessage"></p>
+      <div class="confirm-actions">
+        <button value="cancel" type="submit">返回调查</button>
+        <button id="confirmAcceptBtn" class="confirm-accept" value="confirm" type="submit">确认继续</button>
+      </div>
+    </form>
+  </dialog>
 
   <section id="verdictOverlay" class="verdict-overlay" role="dialog" aria-modal="true" aria-labelledby="verdictTitle" hidden>
     <canvas id="verdictCanvas" width="1600" height="900" aria-hidden="true"></canvas>

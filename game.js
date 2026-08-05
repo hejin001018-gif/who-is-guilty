@@ -19,18 +19,30 @@ const state = {
 
 const elements = {
   log: document.querySelector("#log"),
+  scrollLatest: document.querySelector("#scrollLatestBtn"),
   turnCount: document.querySelector("#turnCount"),
+  turnProgress: document.querySelector("#turnProgress"),
   searchCount: document.querySelector("#searchCount"),
+  searchProgress: document.querySelector("#searchProgress"),
   caseStatus: document.querySelector("#caseStatus"),
+  caseStatusDot: document.querySelector("#caseStatusDot"),
+  statusHint: document.querySelector("#statusHint"),
+  statusCard: document.querySelector(".status-card"),
   subjectList: document.querySelector("#subjectList"),
+  subjectCountLabel: document.querySelector("#subjectCountLabel"),
   subjectProfile: document.querySelector("#subjectProfile"),
   currentSubjectTitle: document.querySelector("#currentSubjectTitle"),
+  interrogationState: document.querySelector("#interrogationState"),
   evidenceGrid: document.querySelector("#evidenceGrid"),
+  evidenceCount: document.querySelector("#evidenceCount"),
   verdictChoices: document.querySelector("#verdictChoices"),
+  verdictSelectionCount: document.querySelector("#verdictSelectionCount"),
   submitVerdict: document.querySelector("#submitVerdictBtn"),
   questionInput: document.querySelector("#questionInput"),
+  questionCount: document.querySelector("#questionCount"),
   questionSubmit: document.querySelector("#questionSubmitBtn"),
   search: document.querySelector("#searchBtn"),
+  searchButtonHint: document.querySelector("#searchButtonHint"),
   newCase: document.querySelector("#newCaseBtn"),
   caseTitle: document.querySelector("#caseTitle"),
   caseBrief: document.querySelector("#caseBrief"),
@@ -52,7 +64,13 @@ const elements = {
   caseReportMeta: document.querySelector("#caseReportMeta"),
   caseReportContent: document.querySelector("#caseReportContent"),
   caseReportBack: document.querySelector("#caseReportBackBtn"),
-  caseReportNewCase: document.querySelector("#caseReportNewCaseBtn")
+  caseReportNewCase: document.querySelector("#caseReportNewCaseBtn"),
+  toastRegion: document.querySelector("#toastRegion"),
+  confirmDialog: document.querySelector("#confirmDialog"),
+  confirmTitle: document.querySelector("#confirmTitle"),
+  confirmMessage: document.querySelector("#confirmMessage"),
+  confirmAccept: document.querySelector("#confirmAcceptBtn"),
+  quickPrompts: Array.from(document.querySelectorAll(".quick-prompts button"))
 };
 
 class ApiError extends Error {
@@ -101,12 +119,14 @@ async function init() {
     addMessage("system", "案件简报", `${caseFile.title}：${caseFile.publicBrief}`);
     addMessage("system", "初始材料", "四条初始线索已经上板。本局最多搜证四次，每次搜证都将推进一个回合。你可以随时提前结案。");
     caseFile.subjects.forEach((subject) => addMessage("ai", subject.name, subject.opening, "unreadable"));
+    showToast("新案卷已就绪。先听取所有人物的开场证词，再决定调查方向。");
   } catch (error) {
     if (version !== requestVersion) return;
     state.loadingCase = false;
     elements.caseTitle.textContent = "案件加载失败";
     elements.caseBrief.textContent = "请确认 Node 服务已经启动，然后点击“新案件”重试。";
     addMessage("system", "连接失败", error.message || "无法创建案件。");
+    showToast(error.message || "案件载入失败，请稍后重试。", "error");
     drawMindscape(null, { mood: "offline", caption: "审讯监控暂时失去信号。", intensity: 10, symbols: ["离线"] });
     updateStats();
   }
@@ -125,10 +145,15 @@ function resetViewForLoading() {
   state.pending = false;
   state.loadingCase = true;
   elements.log.replaceChildren();
+  elements.scrollLatest.hidden = true;
   elements.subjectList.replaceChildren();
   elements.subjectProfile.replaceChildren();
   elements.evidenceGrid.replaceChildren();
   elements.verdictChoices.replaceChildren();
+  elements.subjectCountLabel.textContent = "载入中";
+  elements.questionInput.value = "";
+  updateQuestionComposer();
+  elements.toastRegion.replaceChildren();
   elements.caseTitle.textContent = "正在生成案卷…";
   elements.caseBrief.textContent = "服务端正在整理公开档案、证据闭环与嫌疑人证词。";
   drawMindscape(null, { mood: "loading", caption: "审讯监控正在接入，人物档案正在载入。", intensity: 24, symbols: ["载入"] });
@@ -140,7 +165,8 @@ function isValidPublicCase(value) {
     value
     && typeof value.title === "string"
     && Array.isArray(value.subjects)
-    && value.subjects.length === 3
+    && value.subjects.length >= 2
+    && value.subjects.length <= 3
     && Array.isArray(value.evidence)
     && value.evidence.length === 4
     && value.subjects.every((subject) => subject && typeof subject.id === "string" && typeof subject.name === "string")
@@ -169,7 +195,12 @@ function renderAll() {
 
 function renderSubjects() {
   elements.subjectList.replaceChildren();
-  if (!caseFile) return;
+  if (!caseFile) {
+    elements.subjectCountLabel.textContent = "0 人";
+    return;
+  }
+  elements.subjectCountLabel.textContent = `${caseFile.subjects.length} 人`;
+  elements.subjectList.style.setProperty("--subject-count", caseFile.subjects.length);
   caseFile.subjects.forEach((subject) => {
     const button = document.createElement("button");
     button.className = "subject-card";
@@ -178,6 +209,8 @@ function renderSubjects() {
     button.setAttribute("aria-pressed", String(state.selectedSubject === subject.id));
     if (state.selectedSubject === subject.id) button.classList.add("active");
 
+    const avatar = createTextElement("span", String(subject.name || "?").slice(0, 1), "subject-avatar");
+    avatar.setAttribute("aria-hidden", "true");
     const topLine = document.createElement("div");
     topLine.className = "subject-topline";
     topLine.append(createTextElement("span", subject.aiName), createTextElement("b", `${subject.age}岁`));
@@ -185,7 +218,7 @@ function renderSubjects() {
     const role = createTextElement("p", subject.publicRole);
     const actions = state.actionsBySubject[subject.id] || 0;
     const actionText = subject.protected ? `已行动：${actions} / ${subject.limit} 次` : `已行动：${actions} 次`;
-    button.append(topLine, name, role, createTextElement("small", actionText));
+    button.append(avatar, topLine, name, role, createTextElement("small", actionText));
     button.disabled = state.pending || state.gameOver || state.loadingCase;
     button.addEventListener("click", () => selectSubject(subject.id));
     elements.subjectList.appendChild(button);
@@ -203,24 +236,36 @@ function renderSubjectProfile() {
   );
 }
 
-function renderEvidence() {
+function renderEvidence(highlightId = null) {
   elements.evidenceGrid.replaceChildren();
-  if (!caseFile) return;
-  caseFile.evidence.forEach((item) => {
+  if (!caseFile) {
+    elements.evidenceCount.textContent = "0 条";
+    return;
+  }
+  caseFile.evidence.forEach((item, index) => {
     const card = document.createElement("article");
     card.className = "evidence-card";
-    card.append(
+    if (item.id === highlightId) card.classList.add("is-new");
+    const heading = document.createElement("div");
+    heading.className = "evidence-card-head";
+    heading.append(
       createTextElement("div", item.type, "evidence-type"),
+      createTextElement("span", String(index + 1).padStart(2, "0"), "evidence-number")
+    );
+    card.append(
+      heading,
       createTextElement("h3", item.title),
       createTextElement("p", item.detail)
     );
     elements.evidenceGrid.appendChild(card);
   });
+  elements.evidenceCount.textContent = `${caseFile.evidence.length} 条`;
 }
 
 function renderVerdictChoices() {
   elements.verdictChoices.replaceChildren();
   if (!caseFile) return;
+  elements.verdictChoices.style.setProperty("--subject-count", caseFile.subjects.length);
   caseFile.subjects.forEach((subject) => {
     const label = document.createElement("label");
     label.className = "verdict-choice";
@@ -231,6 +276,7 @@ function renderVerdictChoices() {
     label.append(input, createTextElement("span", subject.name));
     elements.verdictChoices.appendChild(label);
   });
+  updateVerdictSelection();
 }
 
 function selectSubject(subjectId) {
@@ -240,20 +286,43 @@ function selectSubject(subjectId) {
   renderSubjectProfile();
   renderSelectedMindscape();
   updateStats();
+  if (window.matchMedia("(min-width: 901px)").matches) elements.questionInput.focus({ preventScroll: true });
 }
 
 function updateStats() {
   elements.turnCount.textContent = `${state.turns} / ${state.maxTurns}`;
   elements.searchCount.textContent = `${state.searches} / ${state.maxSearches}`;
-  elements.search.textContent = `搜证（${state.searches}/${state.maxSearches}）`;
+  elements.turnProgress.style.width = `${Math.min(100, (state.turns / Math.max(1, state.maxTurns)) * 100)}%`;
+  elements.searchProgress.style.width = `${Math.min(100, (state.searches / Math.max(1, state.maxSearches)) * 100)}%`;
+  const remainingSearches = Math.max(0, state.maxSearches - state.searches);
+  elements.searchButtonHint.textContent = remainingSearches > 0 ? `剩余 ${remainingSearches} 次机会` : "搜证次数已用尽";
   const subject = getSelectedSubject();
   elements.currentSubjectTitle.textContent = subject ? `${subject.name} / ${subject.aiName}` : "等待案件载入";
 
-  if (state.loadingCase) elements.caseStatus.textContent = "载入中";
-  else if (state.gameOver) elements.caseStatus.textContent = "已结案";
-  else if (state.pending) elements.caseStatus.textContent = "回答中";
-  else if (state.turns >= state.maxTurns) elements.caseStatus.textContent = "判断阶段";
-  else elements.caseStatus.textContent = "调查中";
+  elements.statusCard.classList.toggle("is-loading", state.loadingCase || state.pending);
+  elements.statusCard.classList.toggle("is-locked", state.gameOver || (!state.loadingCase && state.turns >= state.maxTurns));
+  elements.interrogationState.classList.toggle("is-pending", state.loadingCase || state.pending);
+  if (state.loadingCase) {
+    elements.caseStatus.textContent = "载入中";
+    elements.statusHint.textContent = "正在生成案卷";
+    elements.interrogationState.lastChild.textContent = "接入中";
+  } else if (state.gameOver) {
+    elements.caseStatus.textContent = "已结案";
+    elements.statusHint.textContent = "案卷已封存";
+    elements.interrogationState.lastChild.textContent = "已结束";
+  } else if (state.pending) {
+    elements.caseStatus.textContent = "回答中";
+    elements.statusHint.textContent = "正在处理行动";
+    elements.interrogationState.lastChild.textContent = "记录中";
+  } else if (state.turns >= state.maxTurns) {
+    elements.caseStatus.textContent = "判断阶段";
+    elements.statusHint.textContent = "请提交结案判断";
+    elements.interrogationState.lastChild.textContent = "已锁定";
+  } else {
+    elements.caseStatus.textContent = "调查中";
+    elements.statusHint.textContent = "证据收集中";
+    elements.interrogationState.lastChild.textContent = "监听中";
+  }
 
   const investigationLocked = state.loadingCase || state.pending || state.gameOver || state.turns >= state.maxTurns;
   elements.search.disabled = investigationLocked || state.searches >= state.maxSearches || !subject;
@@ -264,6 +333,10 @@ function updateStats() {
   elements.verdictChoices.querySelectorAll("input").forEach((input) => {
     input.disabled = state.pending || state.gameOver;
   });
+  elements.quickPrompts.forEach((button) => {
+    button.disabled = investigationLocked || !subject;
+  });
+  document.body.classList.toggle("is-loading", state.loadingCase);
 }
 
 async function searchEvidence() {
@@ -281,7 +354,6 @@ async function searchEvidence() {
     if (!caseFile.evidence.some((item) => item.id === data.evidence.id)) caseFile.evidence.push(data.evidence);
     addMessage("player", "调查员", `围绕 ${subject.name} 展开第 ${state.searches} 次搜证。`);
     addMessage("system", "新证据", `发现《${data.evidence.title}》：${data.evidence.detail}`);
-    renderEvidence();
     renderSubjects();
     renderSubjectProfile();
     drawMindscape(subject, {
@@ -290,6 +362,11 @@ async function searchEvidence() {
       intensity: 46,
       symbols: [data.evidence.type, "监控"]
     });
+    renderEvidence(data.evidence.id);
+    window.requestAnimationFrame(() => {
+      elements.evidenceGrid.scrollTo({ top: elements.evidenceGrid.scrollHeight, behavior: "smooth" });
+    });
+    showToast(`新证据《${data.evidence.title}》已加入证据板。`);
     announceTurnLimitIfNeeded();
   } catch (error) {
     handleActionError(error);
@@ -330,6 +407,7 @@ async function interrogate(question) {
     addMessage("ai", subject.name, data.reply, data.visual?.mood || "unreadable");
     if (data.notice) addMessage("system", "运行提示", data.notice);
     elements.questionInput.value = "";
+    updateQuestionComposer();
     renderSubjects();
     renderSubjectProfile();
     drawMindscape(subject, data.visual);
@@ -350,13 +428,18 @@ async function submitVerdict() {
   const selectedIds = Array.from(elements.verdictChoices.querySelectorAll("input:checked")).map((input) => input.value);
   if (selectedIds.length === 0) {
     addMessage("system", "结案提示", "请先勾选至少一名你认为有罪的对象。");
+    showToast("请先在右侧勾选至少一名有罪对象。", "warning");
     return;
   }
   const early = state.turns < state.maxTurns;
   const prompt = early
     ? `当前仅进行到第 ${state.turns}/${state.maxTurns} 回合。提前结案后不能继续调查，确认提交吗？`
     : "提交后将公布案件真相，确认结案吗？";
-  if (!window.confirm(prompt)) return;
+  if (!await askConfirmation({
+    title: early ? "确定提前结案？" : "确定提交判断？",
+    message: prompt,
+    acceptLabel: "封存并结案"
+  })) return;
 
   const version = requestVersion;
   setPending(true);
@@ -398,22 +481,80 @@ function setPending(value) {
 function handleActionError(error) {
   if (error instanceof ApiError && error.payload?.state) applyServerState(error.payload.state);
   addMessage("system", "操作未完成", error.message || "请求失败，请稍后重试。");
+  showToast(error.message || "请求失败，请稍后重试。", "error");
 }
 
 function announceTurnLimitIfNeeded() {
   if (state.turns >= state.maxTurns && !state.gameOver) {
     addMessage("system", "判断阶段", `${state.maxTurns} 个回合已经结束。调查行动已锁定，请提交结案判断。`);
+    showToast("调查回合已用尽，请根据现有证据提交结案判断。", "warning");
   }
 }
 
 function addMessage(kind, speaker, text, expressionMood = null) {
+  const shouldStickToLatest = isLogNearBottom() || kind === "player" || elements.log.children.length < 2;
   const message = document.createElement("div");
   message.className = `message ${["ai", "player", "system"].includes(kind) ? kind : "system"}`;
   const speakerLine = createTextElement("strong", speaker);
   if (kind === "ai" && expressionMood) speakerLine.appendChild(createSpeakerExpression(expressionMood));
+  const time = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+  speakerLine.appendChild(createTextElement("span", time, "message-time"));
   message.append(speakerLine, document.createTextNode(String(text || "")));
   elements.log.appendChild(message);
-  elements.log.scrollTop = elements.log.scrollHeight;
+  if (shouldStickToLatest) {
+    window.requestAnimationFrame(() => scrollLogToLatest("auto"));
+  } else {
+    updateLogScrollState();
+  }
+}
+
+function isLogNearBottom() {
+  return elements.log.scrollHeight - elements.log.scrollTop - elements.log.clientHeight < 56;
+}
+
+function updateLogScrollState() {
+  elements.scrollLatest.hidden = isLogNearBottom();
+}
+
+function scrollLogToLatest(behavior = "smooth") {
+  elements.log.scrollTo({ top: elements.log.scrollHeight, behavior });
+  elements.scrollLatest.hidden = true;
+}
+
+function updateQuestionComposer() {
+  const length = elements.questionInput.value.length;
+  elements.questionCount.textContent = `${length} / 500`;
+  elements.questionInput.style.height = "auto";
+  elements.questionInput.style.height = `${Math.min(96, Math.max(36, elements.questionInput.scrollHeight))}px`;
+}
+
+function updateVerdictSelection() {
+  const selected = Array.from(elements.verdictChoices.querySelectorAll("input:checked"));
+  elements.verdictSelectionCount.textContent = selected.length ? `已选 ${selected.length} 人` : "未选择";
+  const buttonLabel = elements.submitVerdict.querySelector("span:first-child");
+  if (buttonLabel) buttonLabel.textContent = selected.length ? `提交判断 · ${selected.length} 人` : "提交结案判断";
+}
+
+function showToast(message, kind = "info") {
+  const toast = createTextElement("div", message, `toast ${kind === "info" ? "" : `is-${kind}`}`.trim());
+  elements.toastRegion.replaceChildren(toast);
+  window.setTimeout(() => {
+    if (toast.isConnected) toast.remove();
+  }, 3600);
+}
+
+function askConfirmation({ title, message, acceptLabel = "确认继续" }) {
+  if (typeof elements.confirmDialog.showModal !== "function") return Promise.resolve(window.confirm(message));
+  elements.confirmTitle.textContent = title;
+  elements.confirmMessage.textContent = message;
+  elements.confirmAccept.textContent = acceptLabel;
+  elements.confirmDialog.returnValue = "cancel";
+  elements.confirmDialog.showModal();
+  return new Promise((resolve) => {
+    elements.confirmDialog.addEventListener("close", () => {
+      resolve(elements.confirmDialog.returnValue === "confirm");
+    }, { once: true });
+  });
 }
 
 function createSpeakerExpression(mood) {
@@ -701,6 +842,11 @@ function renderCaseReport(result) {
   appendReportParagraph("完整真相", result.hiddenTruth || "案件真相资料缺失。", "report-truth");
   appendReportParagraph("作案动机", report.motive || "未提供作案动机。", "report-motive");
   appendReportParagraph("作案手法", report.method || "未提供作案手法。", "report-method");
+  if (report.emotionalCore) appendReportParagraph("情感核心", report.emotionalCore, "report-emotional");
+  if (report.relationshipTruth) appendReportParagraph("人物关系真相", report.relationshipTruth, "report-relationship-truth");
+  if (Array.isArray(report.emotionalTurns) && report.emotionalTurns.length > 0) {
+    appendReportList("关系线转折", report.emotionalTurns);
+  }
   appendReportTimeline(report.timeline || []);
   appendReportRoles(report.roles || [], result.guiltyNames || []);
   appendReportList("证据闭环", report.evidenceChain || []);
@@ -884,10 +1030,28 @@ function animateVerdictCanvas(correct) {
 }
 
 elements.search.addEventListener("click", searchEvidence);
+elements.log.addEventListener("scroll", updateLogScrollState, { passive: true });
+elements.scrollLatest.addEventListener("click", () => scrollLogToLatest());
 document.querySelector("#questionForm").addEventListener("submit", (event) => {
   event.preventDefault();
   interrogate(elements.questionInput.value);
 });
+elements.questionInput.addEventListener("input", updateQuestionComposer);
+elements.questionInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  document.querySelector("#questionForm").requestSubmit();
+});
+elements.quickPrompts.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (button.disabled) return;
+    elements.questionInput.value = button.dataset.prompt || "";
+    updateQuestionComposer();
+    elements.questionInput.focus();
+    elements.questionInput.setSelectionRange(elements.questionInput.value.length, elements.questionInput.value.length);
+  });
+});
+elements.verdictChoices.addEventListener("change", updateVerdictSelection);
 elements.submitVerdict.addEventListener("click", submitVerdict);
 elements.verdictReport.addEventListener("click", showCaseReport);
 elements.caseReportBack.addEventListener("click", showVerdictOutcome);
@@ -901,9 +1065,19 @@ elements.caseReportNewCase.addEventListener("click", () => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !elements.caseReportView.hidden) showVerdictOutcome();
+  const target = event.target;
+  const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
+  if (event.key === "/" && !isTyping && elements.verdictOverlay.hidden && !elements.confirmDialog.open && !elements.questionInput.disabled) {
+    event.preventDefault();
+    elements.questionInput.focus();
+  }
 });
-elements.newCase.addEventListener("click", () => {
-  if (caseFile && !state.gameOver && !window.confirm("新建案件会放弃当前调查进度，确认继续吗？")) return;
+elements.newCase.addEventListener("click", async () => {
+  if (caseFile && !state.gameOver && !await askConfirmation({
+    title: "放弃当前调查？",
+    message: "开启新案件会清空当前调查进度，现有审讯记录与证据将无法恢复。",
+    acceptLabel: "放弃并开启新案"
+  })) return;
   init();
 });
 

@@ -49,9 +49,9 @@ test("only browser assets are publicly served", async () => {
 
 test("case creation never sends hidden answers to the browser", async () => {
   const created = await createCase();
-  assert.equal(created.caseFile.subjects.length, 3);
+  assert.ok(created.caseFile.subjects.length >= 2 && created.caseFile.subjects.length <= 3);
   assert.equal(created.caseFile.evidence.length, 4);
-  assert.doesNotMatch(JSON.stringify(created), /hiddenTruth|guiltyIds|secretRole|"guilty"|pressure|runtimeMode/);
+  assert.doesNotMatch(JSON.stringify(created), /hiddenTruth|guiltyIds|secretRole|privateSecret|knowledgeBoundary|deceptionStrategy|"guilty"|pressure|runtimeMode/);
 });
 
 test("a continued exploration does not repeat the previous case background", async () => {
@@ -66,7 +66,9 @@ test("a continued exploration does not repeat the previous case background", asy
 test("four searches cover all subjects and a fifth search is rejected", async () => {
   const created = await createCase();
   const evidenceIds = new Set();
-  for (const subjectId of ["ai1", "ai2", "ai3", "ai1"]) {
+  const subjectIds = created.caseFile.subjects.map((subject) => subject.id);
+  const searchTargets = Array.from({ length: 4 }, (_, index) => subjectIds[index % subjectIds.length]);
+  for (const subjectId of searchTargets) {
     const response = await post(`/api/cases/${created.caseId}/search`, { subjectId });
     assert.equal(response.status, 200);
     const data = await response.json();
@@ -75,7 +77,7 @@ test("four searches cover all subjects and a fifth search is rejected", async ()
     assert.equal("strength" in data.evidence, false);
   }
   assert.equal(evidenceIds.size, 4);
-  const rejected = await post(`/api/cases/${created.caseId}/search`, { subjectId: "ai1" });
+  const rejected = await post(`/api/cases/${created.caseId}/search`, { subjectId: subjectIds[0] });
   assert.equal(rejected.status, 409);
 });
 
@@ -109,11 +111,13 @@ test("an early verdict closes the case", async () => {
 
 test("the twentieth action locks further investigation", async () => {
   const created = await createCase();
+  const unrestrictedSubject = created.caseFile.subjects.find((subject) => !subject.protected);
+  assert.ok(unrestrictedSubject);
   for (let turn = 1; turn <= 20; turn += 1) {
-    const response = await post(`/api/cases/${created.caseId}/interrogate`, { subjectId: "ai1", question: `第 ${turn} 次确认时间线。` });
+    const response = await post(`/api/cases/${created.caseId}/interrogate`, { subjectId: unrestrictedSubject.id, question: `第 ${turn} 次确认时间线。` });
     assert.equal(response.status, 200);
   }
-  const rejected = await post(`/api/cases/${created.caseId}/interrogate`, { subjectId: "ai1", question: "继续审问。" });
+  const rejected = await post(`/api/cases/${created.caseId}/interrogate`, { subjectId: unrestrictedSubject.id, question: "继续审问。" });
   assert.equal(rejected.status, 409);
   const payload = await rejected.json();
   assert.equal(payload.state.turns, 20);
